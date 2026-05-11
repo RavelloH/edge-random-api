@@ -29,32 +29,33 @@ describe("edge random api worker", () => {
   });
 
   it("wraps generated values and supports count", async () => {
-    const response = await fetchWorker("/uuid?count=3");
-    const body = (await response.json()) as { status: number; meta: { type: string; count: number }; data: string[] };
+    const response = await fetchWorker("/uuid?count=3&format=json");
+    const body = (await response.json()) as { status: number; meta: { type: string; count: number; latency_ms: number }; data: string[] };
 
     expect(response.status).toBe(200);
     expect(body.status).toBe(200);
     expect(body.meta.type).toBe("uuid");
     expect(body.meta.count).toBe(3);
+    expect(body.meta.latency_ms).toBeGreaterThan(0);
     expect(body.data).toHaveLength(3);
     expect(body.data[0]).toMatch(/^[0-9a-f-]{36}$/u);
   });
 
   it("is deterministic for the same seed and request", async () => {
-    const first = (await (await fetchWorker("/str:hex/32?seed=repeatable")).json()) as { data: string };
-    const second = (await (await fetchWorker("/str:hex/32?seed=repeatable")).json()) as { data: string };
+    const first = await (await fetchWorker("/str:hex/32?seed=repeatable")).text();
+    const second = await (await fetchWorker("/str:hex/32?seed=repeatable")).text();
 
-    expect(second.data).toBe(first.data);
+    expect(second).toBe(first);
   });
 
-  it("supports text format for string endpoints", async () => {
-    const response = await fetchWorker("/pin/6?format=text&seed=pin");
+  it("defaults to text format for data endpoints", async () => {
+    const response = await fetchWorker("/pin/6?seed=pin");
     expect(response.headers.get("content-type")).toContain("text/plain");
     expect(await response.text()).toMatch(/^\d{6}$/u);
   });
 
   it("generates schema-driven objects from POST JSON", async () => {
-    const response = await fetchWorker("/schema?seed=schema", {
+    const response = await fetchWorker("/schema?seed=schema&format=json", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ fields: { id: "uuid", email: "email", active: "bool", score: "num" } })
@@ -75,6 +76,16 @@ describe("edge random api worker", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/octet-stream");
     expect(bytes.byteLength).toBe(1024);
+  });
+
+  it("returns real unicode and emoji edge-case strings", async () => {
+    const unicode = (await (await fetchWorker("/edgecase:string+unicode?format=json")).json()) as { data: string };
+    const emoji = (await (await fetchWorker("/edgecase:string+emoji?format=json")).json()) as { data: string };
+
+    expect(unicode.data).toContain("\u4E16\u754C");
+    expect(unicode.data).toContain("\u0645\u0631\u062D\u0628\u0627");
+    expect(emoji.data).toContain("\uD83D\uDE00");
+    expect(emoji.data).toContain("\uD83D\uDE80");
   });
 
   it("smoke-tests representative endpoints across the API surface", async () => {
@@ -140,7 +151,7 @@ describe("edge random api worker", () => {
 
     for (const path of paths) {
       const separator = path.includes("?") ? "&" : "?";
-      const response = await fetchWorker(`${path}${separator}seed=smoke`);
+      const response = await fetchWorker(`${path}${separator}seed=smoke&format=json`);
       const body = (await response.json()) as { status: number; data: unknown };
       expect(response.status, path).toBe(200);
       expect(body.status, path).toBe(200);

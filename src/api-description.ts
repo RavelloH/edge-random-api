@@ -45,8 +45,8 @@ export const API_DESCRIPTION = {
     },
     format: {
       type: "string",
-      description: "Response format. Default is json. Text endpoints can use format=text.",
-      options: ["json", "text"]
+      description: "Response format for data endpoints. Default is text. Use format=json for the standard JSON envelope.",
+      options: ["text", "json"]
     },
     seed: {
       type: "string",
@@ -55,7 +55,7 @@ export const API_DESCRIPTION = {
       example: "?seed=my_unique_project_seed"
     }
   },
-  standard_response_format: {
+  standard_response_format_when_format_is_json: {
     status: 200,
     meta: {
       type: "string",
@@ -279,33 +279,6 @@ export const API_DESCRIPTION = {
       { path: "/scenario:observability", description: "Generate logs, metrics, traces, alerts, and service metadata.", example: "/scenario:observability?services=3&events=100" }
     ]
   },
-  removed_or_deferred_for_worker_simplicity: [
-    {
-      feature: "QR image generation",
-      reason:
-        "Can be implemented later, but it is less essential and may add payload/algorithm complexity. Barcode values are kept as strings."
-    },
-    {
-      feature: "PDF generation",
-      reason:
-        "PDF rendering is not lightweight for Cloudflare Worker. Use text, JSON, CSV, XML, YAML, SVG, or binary dummy files instead."
-    },
-    {
-      feature: "Raster image generation",
-      reason:
-        "PNG/JPEG/WebP generation is not lightweight without additional libraries. SVG placeholders and SVG avatars are kept."
-    },
-    {
-      feature: "SSE and long streaming",
-      reason:
-        "Useful but should be treated as an optional API testing module because it changes runtime and connection behavior."
-    },
-    {
-      feature: "Real keypair, certificate, or TOTP generation",
-      reason:
-        "Avoid implying security guarantees beyond random value generation unless the implementation is audited and documented."
-    }
-  ],
   implementation_notes: [
     "Use ':' for finite variants, algorithms, encodings, and modes.",
     "Use path segments for numeric values, lengths, ranges, and counts that are part of the core endpoint shape.",
@@ -315,4 +288,3 @@ export const API_DESCRIPTION = {
     "Mock credentials, JWTs, SSH keys, payment cards, payloads, and hashes must clearly state whether they are safe for production security use or only for testing."
   ]
 } as const;
-

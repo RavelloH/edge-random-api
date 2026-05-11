@@ -575,13 +575,13 @@ function respondGenerated(input: {
   meta?: Record<string, unknown>;
   contentType?: string;
 }): Response {
-  const format = input.ctx.url.searchParams.get("format") ?? "json";
+  const format = input.ctx.url.searchParams.get("format") ?? "text";
   if (format === "text") {
     const contentType = input.contentType ?? "text/plain; charset=utf-8";
     return respondText(stringifyText(input.data), contentType, input.ctx.request.method === "HEAD");
   }
   if (format !== "json") {
-    throw new HttpError(400, "Unsupported format. Use json or text.");
+    throw new HttpError(400, "Unsupported format. Use text or json.");
   }
 
   return respondJson(
@@ -591,7 +591,7 @@ function respondGenerated(input: {
         type: input.type,
         count: input.count,
         timestamp: new Date().toISOString(),
-        latency_ms: round(now() - input.startedAt, 3),
+        latency_ms: latencyMs(input.startedAt),
         randomness: randomnessMeta(input.ctx.rng),
         ...input.meta
       },
@@ -741,6 +741,11 @@ function clampInt(valueToClamp: number, min: number, max: number): number {
 function round(valueToRound: number, digits = 2): number {
   const factor = 10 ** digits;
   return Math.round(valueToRound * factor) / factor;
+}
+
+function latencyMs(startedAt: number): number {
+  const elapsed = Math.max(0, now() - startedAt);
+  return round(Math.max(elapsed, 0.001), 3);
 }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -1989,8 +1994,8 @@ function edgecase(ctx: RouteContext): Generated {
   const cases: Record<string, string> = {
     empty: "",
     long: "x".repeat(4096),
-    unicode: "cafe resume jalapeno",
-    emoji: "test :)",
+    unicode: "cafe resume jalapeno - \u4E16\u754C - \u0645\u0631\u062D\u0628\u0627",
+    emoji: "edge case \uD83D\uDE00 \uD83D\uDE80 \u2728",
     rtl: "abc \u202E txt",
     html: "<div data-test=\"value\">content</div>",
     newline: "line one\nline two\r\nline three",

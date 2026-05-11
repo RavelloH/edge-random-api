@@ -74,12 +74,18 @@ Examples:
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `count` | integer | Number of results to return. Default `1`, max `100`. |
-| `format` | string | Response format. Default `json`; use `text` where supported. |
+| `format` | string | Response format for data endpoints. Default `text`; use `json` for the standard response envelope. |
 | `seed` | string | Deterministic seed for reproducible output. Seeded output is not cryptographically secure. |
 
 ## Response Format
 
-Default JSON response:
+Default data endpoint response is plain text:
+
+```text
+018f2f6a-7c30-7b2c-9d4a-86f3c1d4f0aa
+```
+
+Use `?format=json` for the standard JSON response:
 
 ```json
 {
@@ -98,7 +104,8 @@ Default JSON response:
 }
 ```
 
-When `count=1`, `data` is a single value. When `count>1`, `data` is an array.
+In JSON format, when `count=1`, `data` is a single value. When `count>1`,
+`data` is an array. `GET /` still returns the API description JSON by default.
 
 ## Endpoint Overview
 
