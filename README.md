@@ -24,6 +24,25 @@ Edge Random API provides cryptographically secure random values, mock data, iden
 https://random.ravelloh.com
 ```
 
+When `GET /` is requested, the Worker returns the API description JSON. The `base_url`
+field is derived from the incoming `Host` header, and the response includes the
+GitHub repository metadata for `RavelloH/edge-random-api`.
+
+## Cloudflare Worker
+
+This repository includes a TypeScript Cloudflare Worker implementation.
+
+```bash
+npm install
+npm run dev
+npm run check
+npm run deploy
+```
+
+The Worker uses Web Crypto randomness by default and switches to a deterministic
+seeded PRNG when `seed` is provided. Generated payloads are capped to stay
+Worker-friendly.
+
 ## Routing Model
 
 The API uses a compact routing style optimized for predictable parsing:
