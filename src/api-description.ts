@@ -18,6 +18,25 @@ export const API_DESCRIPTION = {
       "When seed is provided, generation becomes deterministic and should not be treated as cryptographically secure."
     ]
   },
+  data_sources: {
+    faker: {
+      source: "@faker-js/faker@10.4.0",
+      package: "@faker-js/faker",
+      version: "10.4.0",
+      used_for: [
+        "mock text and identity",
+        "business and commerce records",
+        "address and localization-like sample data",
+        "network and system mock values",
+        "developer mock values",
+        "extended sample domains such as books, food, vehicles, airline, music, science, and database fixtures"
+      ],
+      notes: [
+        "Faker-backed endpoints expose source metadata in the JSON envelope when format=json is used.",
+        "Seeded output remains deterministic for the pinned Faker version, but generated values may change if Faker is upgraded."
+      ]
+    }
+  },
   routing_conventions: {
     default_endpoint: "/:resource",
     variant_endpoint: "/:resource:variant",
@@ -66,7 +85,9 @@ export const API_DESCRIPTION = {
         source: "web_crypto_csprng | deterministic_prng",
         seeded: "boolean",
         security: "cryptographically_secure | deterministic"
-      }
+      },
+      source: "optional data source label, for example @faker-js/faker@10.4.0",
+      source_methods: "optional list of upstream source methods used"
     },
     data: "single value when count=1, array when count>1"
   },
@@ -233,6 +254,86 @@ export const API_DESCRIPTION = {
       { path: "/env", description: "Generate mock environment variable key-value pairs.", example: "/env?keys=5" },
       { path: "/git:commit", description: "Generate a mock Git commit hash and metadata.", example: "/git:commit" },
       { path: "/git:branch", description: "Generate a random Git branch name.", example: "/git:branch" }
+    ],
+    faker_extended_data: [
+      {
+        path: "/animal",
+        description: "Generate animal names or animal categories from Faker sample data.",
+        variants: ["/animal:dog", "/animal:cat", "/animal:bird", "/animal:fish", "/animal:horse", "/animal:pet"],
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.animal.*"],
+        example: "/animal:dog"
+      },
+      {
+        path: "/book",
+        description: "Generate a mock book record with title, author, genre, format, and publisher.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.book.*"],
+        example: "/book"
+      },
+      {
+        path: "/food",
+        description: "Generate a mock food record with dish, description, ingredient, and cuisine category.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.food.*"],
+        example: "/food"
+      },
+      {
+        path: "/vehicle",
+        description: "Generate a mock vehicle record with manufacturer, model, type, fuel, VIN, and color.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.vehicle.*"],
+        example: "/vehicle"
+      },
+      {
+        path: "/airline",
+        description: "Generate a mock airline object.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.airline.airline"],
+        example: "/airline"
+      },
+      {
+        path: "/airport",
+        description: "Generate a mock airport object.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.airline.airport"],
+        example: "/airport"
+      },
+      {
+        path: "/flight",
+        description: "Generate a mock flight record with flight number, airline, aircraft, seat, and record locator.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.airline.*"],
+        example: "/flight"
+      },
+      {
+        path: "/hacker",
+        description: "Generate hacker-style placeholder phrases and words.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.hacker.*"],
+        example: "/hacker"
+      },
+      {
+        path: "/music",
+        description: "Generate a mock music record with song, artist, album, and genre.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.music.*"],
+        example: "/music"
+      },
+      {
+        path: "/chemical-element",
+        description: "Generate a random chemical element object.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.science.chemicalElement"],
+        example: "/chemical-element"
+      },
+      {
+        path: "/database",
+        description: "Generate database-related fixture values such as column, type, collation, engine, and ObjectId.",
+        source: "@faker-js/faker@10.4.0",
+        source_methods: ["faker.database.*"],
+        example: "/database"
+      }
     ],
     lightweight_files_and_payloads: [
       { path: "/file/:size_kb", description: "Generate a dummy binary file filled with random bytes. Size should be capped for Worker safety.", example: "/file/256" },

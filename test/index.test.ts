@@ -88,6 +88,16 @@ describe("edge random api worker", () => {
     expect(emoji.data).toContain("\uD83D\uDE80");
   });
 
+  it("marks faker-backed endpoints with source metadata", async () => {
+    const response = await fetchWorker("/person?format=json&seed=faker-source");
+    const body = (await response.json()) as { meta: { source: string; source_methods: string[] }; data: { name: string; email: string } };
+
+    expect(body.meta.source).toBe("@faker-js/faker@10.4.0");
+    expect(body.meta.source_methods).toContain("faker.person.fullName");
+    expect(body.data.name).toBeTruthy();
+    expect(body.data.email).toContain("@");
+  });
+
   it("smoke-tests representative endpoints across the API surface", async () => {
     const paths = [
       "/entropy:hex/8",
@@ -117,11 +127,15 @@ describe("edge random api worker", () => {
       "/matrix/2/2",
       "/lorem:para/1",
       "/markdown",
+      "/animal:dog",
+      "/book",
+      "/food",
       "/name:female",
       "/person",
       "/product",
       "/creditcard:visa",
       "/order",
+      "/vehicle",
       "/ip:v6",
       "/cookies:response",
       "/status/4xx",
@@ -134,6 +148,13 @@ describe("edge random api worker", () => {
       "/business-day",
       "/semver:prerelease",
       "/git:commit",
+      "/hacker",
+      "/music",
+      "/chemical-element",
+      "/database",
+      "/airline",
+      "/airport",
+      "/flight",
       "/csv?rows=2&columns=2",
       "/svg/100/80",
       "/edgecase:json+deep",

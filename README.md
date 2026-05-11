@@ -17,6 +17,7 @@ Edge Random API provides cryptographically secure random values, mock data, iden
 - Lightweight file and payload generation: JSON, CSV, TSV, XML, YAML, SVG, avatars, and binary files
 - Edge-case, invalid, fuzzing, and security-test payloads
 - Schema-based and scenario-based mock data generation
+- Faker-backed sample domains such as books, food, vehicles, airlines, music, science, and database fixtures
 
 ## Base URL
 
@@ -42,6 +43,12 @@ npm run deploy
 The Worker uses Web Crypto randomness by default and switches to a deterministic
 seeded PRNG when `seed` is provided. Generated payloads are capped to stay
 Worker-friendly.
+
+Mock identity, commerce, address, network, developer fixture, and extended sample
+data endpoints use `@faker-js/faker@10.4.0` where it improves realism. In
+`format=json`, faker-backed endpoints include `meta.source` and
+`meta.source_methods`. Faker is version-pinned because seeded Faker output can
+change when its data definitions are upgraded.
 
 ## Routing Model
 
@@ -321,6 +328,30 @@ Mock JWTs, SSH keys, payment cards, and simulated hashes must be clearly documen
 /git:commit
 /git:branch
 ```
+
+### Faker Extended Data
+
+```text
+/animal
+/animal:dog
+/animal:cat
+/animal:bird
+/animal:fish
+/animal:horse
+/animal:pet
+/book
+/food
+/vehicle
+/airline
+/airport
+/flight
+/hacker
+/music
+/chemical-element
+/database
+```
+
+These endpoints use `@faker-js/faker@10.4.0` as their sample data source.
 
 ### Lightweight Files And Payloads
 

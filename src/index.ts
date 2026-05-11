@@ -1,3 +1,8 @@
+import { faker as fakerDE } from "@faker-js/faker/locale/de";
+import { faker as fakerEN_GB } from "@faker-js/faker/locale/en_GB";
+import { faker as fakerEN_US } from "@faker-js/faker/locale/en_US";
+import { faker as fakerJA } from "@faker-js/faker/locale/ja";
+import { faker as fakerZH_CN } from "@faker-js/faker/locale/zh_CN";
 import { API_DESCRIPTION } from "./api-description";
 
 type Env = Record<string, never>;
@@ -49,6 +54,29 @@ const DEFAULT_HEADERS: HeadersInit = {
   "Access-Control-Max-Age": "86400",
   "Cache-Control": "no-store"
 };
+const FAKER_SOURCE = "@faker-js/faker@10.4.0";
+const FAKER_REF_DATE = "2026-05-11T00:00:00.000Z";
+type FakerInstance = typeof fakerEN_US;
+
+const FAKERS_BY_LOCALE: Record<string, FakerInstance> = {
+  en: fakerEN_US,
+  "en-us": fakerEN_US,
+  us: fakerEN_US,
+  "en-gb": fakerEN_GB,
+  gb: fakerEN_GB,
+  "zh-cn": fakerZH_CN,
+  cn: fakerZH_CN,
+  zh: fakerZH_CN,
+  de: fakerDE,
+  "de-de": fakerDE,
+  ja: fakerJA,
+  "ja-jp": fakerJA,
+  jp: fakerJA
+};
+
+for (const fakerInstance of new Set(Object.values(FAKERS_BY_LOCALE))) {
+  fakerInstance.setDefaultRefDate(FAKER_REF_DATE);
+}
 
 const WORDS = [
   "amber",
@@ -192,6 +220,9 @@ const HANDLERS: Record<string, Handler> = {
   paragraph,
   markdown,
   quote,
+  animal,
+  book,
+  food,
   name,
   username,
   email,
@@ -211,6 +242,7 @@ const HANDLERS: Record<string, Handler> = {
   invoice,
   sku,
   barcode,
+  vehicle,
   ip,
   mac,
   port,
@@ -219,6 +251,9 @@ const HANDLERS: Record<string, Handler> = {
   url: randomUrl,
   mime,
   cron,
+  airline,
+  airport,
+  flight,
   headers,
   cookies,
   status,
@@ -254,6 +289,10 @@ const HANDLERS: Record<string, Handler> = {
   regex,
   env,
   git,
+  hacker,
+  music,
+  "chemical-element": chemicalElement,
+  database,
   file,
   csv,
   tsv,
@@ -668,6 +707,34 @@ function randomnessMeta(rng: RandomSource): { source: string; seeded: boolean; s
     seeded: rng.seeded,
     security: rng.seeded ? "deterministic" : "cryptographically_secure"
   };
+}
+
+function fakerFor(ctx: RouteContext): FakerInstance {
+  const localeHint = (ctx.url.searchParams.get("locale") ?? ctx.url.searchParams.get("country") ?? "en-US")
+    .toLowerCase()
+    .replaceAll("_", "-");
+  const fakerInstance =
+    FAKERS_BY_LOCALE[localeHint] ??
+    FAKERS_BY_LOCALE[localeHint.split("-")[0]] ??
+    FAKERS_BY_LOCALE["en-us"];
+  fakerInstance.seed([ctx.rng.int(1, 2_147_483_647), ctx.iteration + 1, hashString32(ctx.routeType)]);
+  fakerInstance.setDefaultRefDate(FAKER_REF_DATE);
+  return fakerInstance;
+}
+
+function fakerMeta(methods: string | string[]): Record<string, unknown> {
+  return {
+    source: FAKER_SOURCE,
+    source_methods: Array.isArray(methods) ? methods : [methods]
+  };
+}
+
+function fakerValue(data: unknown, methods: string | string[]): GeneratedValue {
+  return value(data, { meta: fakerMeta(methods) });
+}
+
+function hashString32(input: string): number {
+  return xmur3(input)();
 }
 
 function queryInt(params: URLSearchParams, name: string, fallback: number, min: number, max: number): number {
@@ -1086,8 +1153,7 @@ function cuid2(ctx: RouteContext): Generated {
 }
 
 function objectid(ctx: RouteContext): Generated {
-  const timeHex = Math.floor(Date.now() / 1000).toString(16).padStart(8, "0");
-  return `${timeHex}${bytesToHex(ctx.rng.bytes(8))}`;
+  return fakerValue(fakerFor(ctx).database.mongodbObjectId(), "faker.database.mongodbObjectId");
 }
 
 function ksuid(ctx: RouteContext): Generated {
@@ -1259,36 +1325,40 @@ function matrix(ctx: RouteContext): Generated {
 }
 
 function lorem(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
   const type = ctx.variants[0] ?? "sentence";
   const amount = argInt(ctx, 0, 1, 1, 100);
   if (type === "word") {
-    return Array.from({ length: amount }, () => ctx.rng.pick(LOREM_WORDS)).join(" ");
+    return fakerValue(faker.lorem.words(amount), "faker.lorem.words");
   }
   if (type === "sentence") {
-    return Array.from({ length: amount }, () => makeSentence(ctx, LOREM_WORDS)).join(" ");
+    return fakerValue(faker.lorem.sentences(amount), "faker.lorem.sentences");
   }
   if (type === "para" || type === "paragraph") {
-    return Array.from({ length: amount }, () => makeParagraph(ctx, LOREM_WORDS)).join("\n\n");
+    return fakerValue(faker.lorem.paragraphs(amount), "faker.lorem.paragraphs");
   }
   if (type === "html") {
-    return Array.from({ length: amount }, () => `<p>${escapeHtml(makeParagraph(ctx, LOREM_WORDS))}</p>`).join("");
+    return fakerValue(
+      Array.from({ length: amount }, () => `<p>${escapeHtml(faker.lorem.paragraph())}</p>`).join(""),
+      "faker.lorem.paragraph"
+    );
   }
   throw new HttpError(400, `Unsupported lorem type: ${type}`);
 }
 
 function words(ctx: RouteContext): Generated {
   const count = argInt(ctx, 0, 5, 0, 1000);
-  return Array.from({ length: count }, () => ctx.rng.pick(WORDS));
+  return fakerValue(fakerFor(ctx).word.words({ count }).split(" "), "faker.word.words");
 }
 
 function sentence(ctx: RouteContext): Generated {
   const count = argInt(ctx, 0, 1, 1, 100);
-  return Array.from({ length: count }, () => makeSentence(ctx, WORDS)).join(" ");
+  return fakerValue(fakerFor(ctx).lorem.sentences(count), "faker.lorem.sentences");
 }
 
 function paragraph(ctx: RouteContext): Generated {
   const count = argInt(ctx, 0, 1, 1, 20);
-  return Array.from({ length: count }, () => makeParagraph(ctx, WORDS)).join("\n\n");
+  return fakerValue(fakerFor(ctx).lorem.paragraphs(count), "faker.lorem.paragraphs");
 }
 
 function makeSentence(ctx: RouteContext, dictionary: readonly string[]): string {
@@ -1302,60 +1372,113 @@ function makeParagraph(ctx: RouteContext, dictionary: readonly string[]): string
 }
 
 function markdown(ctx: RouteContext): Generated {
-  const rows = Array.from({ length: 3 }, () => `| ${ctx.rng.pick(WORDS)} | ${ctx.rng.int(1, 100)} |`).join("\n");
-  return `# ${titleCase(ctx.rng.pick(WORDS))} ${titleCase(ctx.rng.pick(WORDS))}\n\n${makeParagraph(ctx, WORDS)}\n\n- ${ctx.rng.pick(WORDS)}\n- ${ctx.rng.pick(WORDS)}\n- ${ctx.rng.pick(WORDS)}\n\n| name | value |\n| --- | ---: |\n${rows}\n\n\`\`\`json\n${JSON.stringify({ id: uuidV4(ctx.rng), ok: true }, null, 2)}\n\`\`\`\n`;
+  const faker = fakerFor(ctx);
+  const rows = Array.from({ length: 3 }, () => `| ${faker.commerce.productName()} | ${ctx.rng.int(1, 100)} |`).join("\n");
+  return fakerValue(
+    `# ${faker.company.catchPhrase()}\n\n${faker.lorem.paragraphs(2)}\n\n- ${faker.hacker.phrase()}\n- ${faker.commerce.productDescription()}\n- ${faker.company.buzzPhrase()}\n\n| name | value |\n| --- | ---: |\n${rows}\n\n\`\`\`json\n${JSON.stringify({ id: uuidV4(ctx.rng), ok: true }, null, 2)}\n\`\`\`\n`,
+    ["faker.company.catchPhrase", "faker.lorem.paragraphs", "faker.hacker.phrase", "faker.commerce.productName"]
+  );
 }
 
 function quote(ctx: RouteContext): Generated {
-  const quotes = [
-    { text: "Make the interface honest and the data useful.", author: "Placeholder Author" },
-    { text: "Small tools become durable when their edges are clear.", author: "Example Systems" },
-    { text: "Reproducibility is a feature, not an accident.", author: "Test Fixture Notes" }
-  ];
-  return ctx.rng.pick(quotes);
+  const faker = fakerFor(ctx);
+  return fakerValue({ text: faker.hacker.phrase(), author: faker.person.fullName() }, [
+    "faker.hacker.phrase",
+    "faker.person.fullName"
+  ]);
+}
+
+function animal(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  const type = ctx.variants[0] ?? "type";
+  const generators: Record<string, () => string> = {
+    dog: () => faker.animal.dog(),
+    cat: () => faker.animal.cat(),
+    bird: () => faker.animal.bird(),
+    fish: () => faker.animal.fish(),
+    horse: () => faker.animal.horse(),
+    pet: () => faker.animal.petName(),
+    type: () => faker.animal.type()
+  };
+  return fakerValue((generators[type] ?? generators.type)(), `faker.animal.${type in generators ? type : "type"}`);
+}
+
+function book(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      title: faker.book.title(),
+      author: faker.book.author(),
+      genre: faker.book.genre(),
+      format: faker.book.format(),
+      publisher: faker.book.publisher()
+    },
+    ["faker.book.title", "faker.book.author", "faker.book.genre", "faker.book.format", "faker.book.publisher"]
+  );
+}
+
+function food(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      dish: faker.food.dish(),
+      description: faker.food.description(),
+      ingredient: faker.food.ingredient(),
+      cuisine: faker.food.ethnicCategory()
+    },
+    ["faker.food.dish", "faker.food.description", "faker.food.ingredient", "faker.food.ethnicCategory"]
+  );
 }
 
 function name(ctx: RouteContext): Generated {
-  return randomFullName(ctx, ctx.variants[0]);
+  return fakerValue(randomFullName(ctx, ctx.variants[0]), "faker.person.fullName");
 }
 
 function randomFullName(ctx: RouteContext, gender = "any"): string {
-  const first = gender === "male" ? ctx.rng.pick(FIRST_NAMES_MALE) : gender === "female" ? ctx.rng.pick(FIRST_NAMES_FEMALE) : ctx.rng.pick([...FIRST_NAMES_MALE, ...FIRST_NAMES_FEMALE]);
-  return `${first} ${ctx.rng.pick(LAST_NAMES)}`;
+  const faker = fakerFor(ctx);
+  if (gender === "male" || gender === "female") {
+    return faker.person.fullName({ sex: gender });
+  }
+  return faker.person.fullName();
 }
 
 function username(ctx: RouteContext): Generated {
-  return `${ctx.rng.pick(WORDS)}_${ctx.rng.pick(WORDS)}${ctx.rng.int(10, 9999)}`.toLowerCase();
+  return fakerValue(fakerFor(ctx).internet.username(), "faker.internet.username");
 }
 
 function email(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
   const domainName = ctx.url.searchParams.get("domain") ?? "example.com";
-  return `${String(username(ctx)).replace(/[^a-z0-9._-]/gu, "")}@${domainName}`;
+  return fakerValue(faker.internet.email({ provider: domainName }), "faker.internet.email");
 }
 
 function phone(ctx: RouteContext): Generated {
-  const countryCode = ctx.url.searchParams.get("country")?.toUpperCase() ?? "US";
-  if (countryCode === "CN") {
-    return `+86 1${ctx.rng.int(30, 99)} ${ctx.rng.int(1000, 9999)} ${ctx.rng.int(1000, 9999)}`;
-  }
-  if (countryCode === "GB") {
-    return `+44 7${ctx.rng.int(100, 999)} ${ctx.rng.int(100000, 999999)}`;
-  }
-  return `+1 (${ctx.rng.int(200, 999)}) ${ctx.rng.int(200, 999)}-${ctx.rng.int(0, 9999).toString().padStart(4, "0")}`;
+  return fakerValue(fakerFor(ctx).phone.number(), "faker.phone.number");
 }
 
 function bio(ctx: RouteContext): Generated {
-  return `${randomFullName(ctx)} is a ${ctx.rng.pick(JOB_TITLES).toLowerCase()} focused on ${ctx.rng.pick(WORDS)} systems and ${ctx.rng.pick(WORDS)} workflows.`;
+  return fakerValue(fakerFor(ctx).person.bio(), "faker.person.bio");
 }
 
 function person(ctx: RouteContext): Generated {
-  const fullName = randomFullName(ctx);
+  return fakerValue(makePerson(ctx), [
+    "faker.person.fullName",
+    "faker.internet.email",
+    "faker.phone.number",
+    "faker.location.streetAddress",
+    "faker.location.zipCode"
+  ]);
+}
+
+function makePerson(ctx: RouteContext): Record<string, unknown> {
+  const faker = fakerFor(ctx);
+  const fullName = faker.person.fullName();
   const countryItem = pickCountry(ctx);
   return {
     id: uuidV4(ctx.rng),
     name: fullName,
-    email: `${safeIdentifier(fullName)}@example.com`,
-    phone: phone(ctx),
+    email: faker.internet.email({ firstName: fullName.split(" ")[0], lastName: fullName.split(" ").at(-1) }),
+    phone: faker.phone.number(),
     address: makeAddress(ctx, countryItem),
     locale: countryItem.locale,
     timezone: countryItem.timezone
@@ -1363,44 +1486,80 @@ function person(ctx: RouteContext): Generated {
 }
 
 function user(ctx: RouteContext): Generated {
-  const profile = person(ctx) as Record<string, unknown>;
+  return fakerValue(makeUser(ctx), [
+    "faker.person.fullName",
+    "faker.internet.email",
+    "faker.internet.username",
+    "faker.phone.number",
+    "faker.location.streetAddress"
+  ]);
+}
+
+function makeUser(ctx: RouteContext): Record<string, unknown> {
+  const faker = fakerFor(ctx);
+  const profile = makePerson(ctx);
   return {
     id: profile.id,
-    username: username(ctx),
+    username: faker.internet.username(),
     email: profile.email,
     name: profile.name,
-    role: ctx.rng.pick(["admin", "editor", "viewer", "member"]),
+    role: faker.helpers.arrayElement(["admin", "editor", "viewer", "member"]),
     active: ctx.rng.bool(0.85),
     created_at: randomPastDate(ctx, 365).toISOString()
   };
 }
 
 function company(ctx: RouteContext): Generated {
-  const companyName = ctx.rng.pick(COMPANIES);
+  return fakerValue(makeCompany(ctx), ["faker.company.name", "faker.internet.domainName", "faker.company.catchPhrase"]);
+}
+
+function makeCompany(ctx: RouteContext): Record<string, unknown> {
+  const faker = fakerFor(ctx);
+  const companyName = faker.company.name();
   return {
     id: uuidV4(ctx.rng),
     name: companyName,
-    domain: `${safeIdentifier(companyName)}.example`,
+    domain: faker.internet.domainName(),
     employees: ctx.rng.int(5, 5000),
-    industry: ctx.rng.pick(["Software", "Retail", "Finance", "Healthcare", "Education"])
+    catch_phrase: faker.company.catchPhrase(),
+    industry: faker.commerce.department()
   };
 }
 
 function job(ctx: RouteContext): Generated {
-  return {
-    title: ctx.rng.pick(JOB_TITLES),
-    department: ctx.rng.pick(DEPARTMENTS),
-    seniority: ctx.rng.pick(["Junior", "Mid", "Senior", "Staff", "Principal"])
-  };
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      title: faker.person.jobTitle(),
+      descriptor: faker.person.jobDescriptor(),
+      area: faker.person.jobArea(),
+      type: faker.person.jobType(),
+      department: faker.commerce.department(),
+      seniority: faker.helpers.arrayElement(["Junior", "Mid", "Senior", "Staff", "Principal"])
+    },
+    ["faker.person.jobTitle", "faker.person.jobDescriptor", "faker.person.jobArea", "faker.person.jobType"]
+  );
 }
 
 function product(ctx: RouteContext): Generated {
+  return fakerValue(makeProduct(ctx), [
+    "faker.commerce.productName",
+    "faker.commerce.productDescription",
+    "faker.commerce.department",
+    "faker.commerce.price"
+  ]);
+}
+
+function makeProduct(ctx: RouteContext): Record<string, unknown> {
+  const faker = fakerFor(ctx);
   return {
-    id: sku(ctx),
-    name: `${titleCase(ctx.rng.pick(WORDS))} ${ctx.rng.pick(PRODUCTS)}`,
-    price: money(ctx),
+    id: String(sku(ctx)),
+    name: faker.commerce.productName(),
+    description: faker.commerce.productDescription(),
+    price: makeMoney(ctx),
     stock: ctx.rng.int(0, 500),
-    category: ctx.rng.pick(["office", "travel", "electronics", "home"])
+    category: faker.commerce.department(),
+    material: faker.commerce.productMaterial()
   };
 }
 
@@ -1409,30 +1568,35 @@ function price(ctx: RouteContext): Generated {
 }
 
 function money(ctx: RouteContext): Generated {
+  return fakerValue(makeMoney(ctx), ["faker.finance.amount", "faker.finance.currency"]);
+}
+
+function makeMoney(ctx: RouteContext): Record<string, unknown> {
+  const faker = fakerFor(ctx);
   const min = queryFloat(ctx.url.searchParams, "min", 1, -1_000_000, 1_000_000);
   const max = queryFloat(ctx.url.searchParams, "max", 1000, -1_000_000, 1_000_000);
-  const currencyCode = ctx.url.searchParams.get("currency")?.toUpperCase() ?? ctx.rng.pick(CURRENCIES);
-  const amount = round(ctx.rng.number(min, max), 2);
+  const currencyInfo = faker.finance.currency();
+  const currencyCode = ctx.url.searchParams.get("currency")?.toUpperCase() ?? currencyInfo.code;
+  const amount = Number.parseFloat(faker.finance.amount({ min: Math.min(min, max), max: Math.max(min, max), dec: 2 }));
   return { amount, currency: currencyCode, formatted: `${currencyCode} ${amount.toFixed(2)}` };
 }
 
 function creditcard(ctx: RouteContext): Generated {
-  const brand = ctx.variants[0] ?? ctx.rng.pick(["visa", "mastercard", "amex", "discover"]);
-  const prefixes: Record<string, string> = { visa: "4", mastercard: "5", amex: "34", discover: "6011" };
-  const lengths: Record<string, number> = { visa: 16, mastercard: 16, amex: 15, discover: 16 };
-  const prefix = prefixes[brand] ?? prefixes.visa;
-  const length = lengths[brand] ?? 16;
-  const body = prefix + randomString(ctx.rng, length - prefix.length - 1, "0123456789");
-  const check = luhnCheckDigit(body);
+  const faker = fakerFor(ctx);
   return value(
     {
-      brand,
-      number: `${body}${check}`,
+      brand: ctx.variants[0] ?? faker.finance.creditCardIssuer(),
+      number: faker.finance.creditCardNumber(),
       exp_month: ctx.rng.int(1, 12).toString().padStart(2, "0"),
       exp_year: ctx.rng.int(2027, 2036),
-      cvc: randomString(ctx.rng, brand === "amex" ? 4 : 3, "0123456789")
+      cvc: faker.finance.creditCardCVV()
     },
-    { meta: endpointWarning("Mock payment card for UI and validation tests only. It is not a real usable card.") }
+    {
+      meta: {
+        ...endpointWarning("Mock payment card for UI and validation tests only. It is not a real usable card."),
+        ...fakerMeta(["faker.finance.creditCardNumber", "faker.finance.creditCardIssuer", "faker.finance.creditCardCVV"])
+      }
+    }
   );
 }
 
@@ -1454,8 +1618,7 @@ function luhnCheckDigit(input: string): number {
 }
 
 function iban(ctx: RouteContext): Generated {
-  const countryCode = ctx.url.searchParams.get("country")?.toUpperCase() ?? ctx.rng.pick(["DE", "GB", "FR", "NL", "ES"]);
-  return `${countryCode}${ctx.rng.int(10, 98)}${randomString(ctx.rng, 18, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")}`;
+  return fakerValue(fakerFor(ctx).finance.iban(), "faker.finance.iban");
 }
 
 function orderid(ctx: RouteContext): Generated {
@@ -1463,7 +1626,7 @@ function orderid(ctx: RouteContext): Generated {
 }
 
 function order(ctx: RouteContext): Generated {
-  const items = Array.from({ length: ctx.rng.int(1, 5) }, () => product(ctx) as { price: { amount: number } });
+  const items = Array.from({ length: ctx.rng.int(1, 5) }, () => makeProduct(ctx) as { price: { amount: number } });
   const total = round(
     items.reduce<number>((sum, item) => {
       const moneyValue = item.price;
@@ -1486,7 +1649,7 @@ function invoice(ctx: RouteContext): Generated {
   return {
     id: `INV-${ctx.rng.int(10000, 99999)}`,
     order_id: orderid(ctx),
-    amount: money(ctx),
+    amount: makeMoney(ctx),
     due_date: due.toISOString().slice(0, 10),
     paid: ctx.rng.bool(0.65)
   };
@@ -1507,6 +1670,30 @@ function barcode(ctx: RouteContext): Generated {
   return randomString(ctx.rng, 13, "0123456789");
 }
 
+function vehicle(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      vehicle: faker.vehicle.vehicle(),
+      manufacturer: faker.vehicle.manufacturer(),
+      model: faker.vehicle.model(),
+      type: faker.vehicle.type(),
+      fuel: faker.vehicle.fuel(),
+      vin: faker.vehicle.vin(),
+      color: faker.vehicle.color()
+    },
+    [
+      "faker.vehicle.vehicle",
+      "faker.vehicle.manufacturer",
+      "faker.vehicle.model",
+      "faker.vehicle.type",
+      "faker.vehicle.fuel",
+      "faker.vehicle.vin",
+      "faker.vehicle.color"
+    ]
+  );
+}
+
 function ip(ctx: RouteContext): Generated {
   const type = ctx.variants[0] ?? "v4";
   if (type === "v6") {
@@ -1525,33 +1712,75 @@ function port(ctx: RouteContext): Generated {
 }
 
 function useragent(ctx: RouteContext): Generated {
-  const type = (ctx.variants[0] ?? "desktop") as keyof typeof USER_AGENTS;
-  return ctx.rng.pick(USER_AGENTS[type] ?? USER_AGENTS.desktop);
+  void ctx.variants;
+  return fakerValue(makeUserAgent(ctx), "faker.internet.userAgent");
+}
+
+function makeUserAgent(ctx: RouteContext): string {
+  return fakerFor(ctx).internet.userAgent();
 }
 
 function domain(ctx: RouteContext): Generated {
-  return `${ctx.rng.pick(WORDS)}-${ctx.rng.pick(WORDS)}.${ctx.rng.pick(["com", "net", "org", "dev", "io"])}`.toLowerCase();
+  return fakerValue(makeDomain(ctx), "faker.internet.domainName");
+}
+
+function makeDomain(ctx: RouteContext): string {
+  return fakerFor(ctx).internet.domainName();
 }
 
 function randomUrl(ctx: RouteContext): Generated {
-  return `https://${domain(ctx)}/${safeIdentifier(ctx.rng.pick(WORDS))}/${safeIdentifier(ctx.rng.pick(WORDS))}?id=${ctx.rng.int(1000, 9999)}`;
+  return fakerValue(fakerFor(ctx).internet.url(), "faker.internet.url");
 }
 
 function mime(ctx: RouteContext): Generated {
-  return ctx.rng.pick(MIME_TYPES);
+  return fakerValue(fakerFor(ctx).system.mimeType(), "faker.system.mimeType");
 }
 
 function cron(ctx: RouteContext): Generated {
-  return `${ctx.rng.int(0, 59)} ${ctx.rng.int(0, 23)} * * ${ctx.rng.int(0, 6)}`;
+  return fakerValue(fakerFor(ctx).system.cron(), "faker.system.cron");
+}
+
+function airline(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(faker.airline.airline(), "faker.airline.airline");
+}
+
+function airport(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(faker.airline.airport(), "faker.airline.airport");
+}
+
+function flight(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      flight_number: faker.airline.flightNumber(),
+      airline: faker.airline.airline(),
+      aircraft: faker.airline.airplane(),
+      seat: faker.airline.seat(),
+      record_locator: faker.airline.recordLocator()
+    },
+    [
+      "faker.airline.flightNumber",
+      "faker.airline.airline",
+      "faker.airline.airplane",
+      "faker.airline.seat",
+      "faker.airline.recordLocator"
+    ]
+  );
 }
 
 function headers(ctx: RouteContext): Generated {
-  return {
-    "x-request-id": uuidV4(ctx.rng),
-    "content-type": ctx.rng.pick(MIME_TYPES),
-    "cache-control": ctx.rng.pick(["no-store", "max-age=60", "public, max-age=3600"]),
-    "user-agent": useragent(ctx)
-  };
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      "x-request-id": uuidV4(ctx.rng),
+      "content-type": faker.system.mimeType(),
+      "cache-control": ctx.rng.pick(["no-store", "max-age=60", "public, max-age=3600"]),
+      "user-agent": faker.internet.userAgent()
+    },
+    ["faker.system.mimeType", "faker.internet.userAgent"]
+  );
 }
 
 function cookies(ctx: RouteContext): Generated {
@@ -1720,54 +1949,50 @@ function country(ctx: RouteContext): Generated {
 }
 
 function city(ctx: RouteContext): Generated {
-  return ctx.rng.pick(pickCountry(ctx).cities);
+  return fakerValue(fakerFor(ctx).location.city(), "faker.location.city");
 }
 
 function address(ctx: RouteContext): Generated {
-  return makeAddress(ctx, pickCountry(ctx));
+  return fakerValue(makeAddress(ctx, pickCountry(ctx)), [
+    "faker.location.streetAddress",
+    "faker.location.zipCode"
+  ]);
 }
 
 function street(ctx: RouteContext): Generated {
-  return `${ctx.rng.int(1, 9999)} ${ctx.rng.pick(STREET_NAMES)} ${ctx.rng.pick(["St", "Ave", "Rd", "Blvd", "Lane"])}`;
+  return fakerValue(fakerFor(ctx).location.streetAddress(), "faker.location.streetAddress");
 }
 
 function makeAddress(ctx: RouteContext, countryItem: (typeof COUNTRIES)[number]): Record<string, string> {
+  const faker = fakerFor(ctx);
   return {
-    street: String(street(ctx)),
+    street: faker.location.streetAddress(),
     city: ctx.rng.pick(countryItem.cities),
-    postal_code: String(postalcode(ctx)),
+    postal_code: faker.location.zipCode(),
     country: countryItem.name,
     country_code: countryItem.code
   };
 }
 
 function postalcode(ctx: RouteContext): Generated {
-  const countryCode = ctx.url.searchParams.get("country")?.toUpperCase() ?? "US";
-  if (countryCode === "GB") {
-    return `${randomString(ctx.rng, 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")}${ctx.rng.int(1, 99)} ${ctx.rng.int(1, 9)}${randomString(ctx.rng, 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")}`;
-  }
-  if (countryCode === "CN") {
-    return randomString(ctx.rng, 6, "0123456789");
-  }
-  return ctx.rng.int(10000, 99999).toString();
+  return fakerValue(fakerFor(ctx).location.zipCode(), "faker.location.zipCode");
 }
 
 function timezone(ctx: RouteContext): Generated {
-  return pickCountry(ctx).timezone;
+  return fakerValue(fakerFor(ctx).location.timeZone(), "faker.location.timeZone");
 }
 
 function locale(ctx: RouteContext): Generated {
-  return pickCountry(ctx).locale;
+  const selectedLocale = ctx.url.searchParams.get("locale") ?? ctx.url.searchParams.get("country") ?? "en-US";
+  return selectedLocale.replaceAll("_", "-");
 }
 
 function currency(ctx: RouteContext): Generated {
-  const countryItem = pickCountry(ctx);
-  return { code: countryItem.currency, country: countryItem.code };
+  return fakerValue(fakerFor(ctx).finance.currency(), "faker.finance.currency");
 }
 
 function language(ctx: RouteContext): Generated {
-  const countryItem = pickCountry(ctx);
-  return { language: countryItem.language, locale: countryItem.locale };
+  return fakerValue(fakerFor(ctx).location.language(), "faker.location.language");
 }
 
 function date(ctx: RouteContext): Generated {
@@ -1825,7 +2050,11 @@ function month(ctx: RouteContext): Generated {
 }
 
 function semver(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
   const variant = ctx.variants[0] ?? "patch";
+  if (variant === "patch") {
+    return fakerValue(faker.system.semver(), "faker.system.semver");
+  }
   const major = ctx.rng.int(0, 9);
   const minor = variant === "major" ? 0 : ctx.rng.int(0, 20);
   const patchValue = variant === "major" || variant === "minor" ? 0 : ctx.rng.int(0, 50);
@@ -1835,7 +2064,7 @@ function semver(ctx: RouteContext): Generated {
 
 function slug(ctx: RouteContext): Generated {
   const count = queryInt(ctx.url.searchParams, "words", 3, 1, 12);
-  return Array.from({ length: count }, () => ctx.rng.pick(WORDS)).join("-");
+  return fakerValue(fakerFor(ctx).lorem.slug(count), "faker.lorem.slug");
 }
 
 function base64(ctx: RouteContext): Generated {
@@ -1869,16 +2098,78 @@ function env(ctx: RouteContext): Generated {
 }
 
 function git(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
   if (ctx.variants[0] === "branch") {
-    return `${ctx.rng.pick(["feature", "fix", "chore", "release"])}/${slug(ctx)}`;
+    return fakerValue(faker.git.branch(), "faker.git.branch");
   }
-  return {
-    hash: bytesToHex(ctx.rng.bytes(20)),
-    short: bytesToHex(ctx.rng.bytes(4)),
-    author: randomFullName(ctx),
-    message: `${titleCase(ctx.rng.pick(["add", "fix", "update", "remove"]))} ${ctx.rng.pick(WORDS)} ${ctx.rng.pick(WORDS)}`,
-    timestamp: randomPastDate(ctx, 30).toISOString()
-  };
+  return fakerValue(
+    {
+      hash: faker.git.commitSha(),
+      short: faker.git.commitSha({ length: 7 }),
+      author: faker.person.fullName(),
+      message: faker.git.commitMessage(),
+      entry: faker.git.commitEntry(),
+      timestamp: faker.git.commitDate()
+    },
+    ["faker.git.commitSha", "faker.git.commitMessage", "faker.git.commitEntry", "faker.git.commitDate"]
+  );
+}
+
+function hacker(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      phrase: faker.hacker.phrase(),
+      abbreviation: faker.hacker.abbreviation(),
+      adjective: faker.hacker.adjective(),
+      noun: faker.hacker.noun(),
+      verb: faker.hacker.verb()
+    },
+    [
+      "faker.hacker.phrase",
+      "faker.hacker.abbreviation",
+      "faker.hacker.adjective",
+      "faker.hacker.noun",
+      "faker.hacker.verb"
+    ]
+  );
+}
+
+function music(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      song: faker.music.songName(),
+      artist: faker.music.artist(),
+      album: faker.music.album(),
+      genre: faker.music.genre()
+    },
+    ["faker.music.songName", "faker.music.artist", "faker.music.album", "faker.music.genre"]
+  );
+}
+
+function chemicalElement(ctx: RouteContext): Generated {
+  return fakerValue(fakerFor(ctx).science.chemicalElement(), "faker.science.chemicalElement");
+}
+
+function database(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      column: faker.database.column(),
+      type: faker.database.type(),
+      collation: faker.database.collation(),
+      engine: faker.database.engine(),
+      mongodb_object_id: faker.database.mongodbObjectId()
+    },
+    [
+      "faker.database.column",
+      "faker.database.type",
+      "faker.database.collation",
+      "faker.database.engine",
+      "faker.database.mongodbObjectId"
+    ]
+  );
 }
 
 function file(ctx: RouteContext): Generated {
@@ -2037,30 +2328,44 @@ function payload(ctx: RouteContext): Generated {
 }
 
 function log(ctx: RouteContext): Generated {
+  const faker = fakerFor(ctx);
   const variant = ctx.variants[0] ?? "info";
   if (variant === "nginx") {
-    return `${ip({ ...ctx, variants: ["v4"] })} - - [${new Date().toUTCString()}] "GET /api/random HTTP/1.1" 200 ${ctx.rng.int(128, 16384)} "-" "${useragent(ctx)}"`;
+    return fakerValue(
+      `${ip({ ...ctx, variants: ["v4"] })} - - [${new Date().toUTCString()}] "${faker.internet.httpMethod()} /${faker.lorem.slug()} HTTP/1.1" ${faker.internet.httpStatusCode()} ${ctx.rng.int(128, 16384)} "-" "${makeUserAgent(ctx)}"`,
+      ["faker.internet.httpMethod", "faker.internet.httpStatusCode", "faker.internet.userAgent", "faker.lorem.slug"]
+    );
   }
   if (variant === "apache") {
-    return `${ip({ ...ctx, variants: ["v4"] })} - user [${new Date().toUTCString()}] "POST /login HTTP/1.1" 302 ${ctx.rng.int(128, 16384)}`;
+    return fakerValue(
+      `${ip({ ...ctx, variants: ["v4"] })} - ${faker.internet.username()} [${new Date().toUTCString()}] "${faker.internet.httpMethod()} /${faker.lorem.slug()} HTTP/1.1" ${faker.internet.httpStatusCode()} ${ctx.rng.int(128, 16384)}`,
+      ["faker.internet.username", "faker.internet.httpMethod", "faker.internet.httpStatusCode", "faker.lorem.slug"]
+    );
   }
-  return {
-    timestamp: new Date().toISOString(),
-    level: variant,
-    service: `${ctx.rng.pick(WORDS)}-service`,
-    message: `${titleCase(ctx.rng.pick(WORDS))} event processed`,
-    request_id: uuidV4(ctx.rng)
-  };
+  return fakerValue(
+    {
+      timestamp: new Date().toISOString(),
+      level: variant,
+      service: `${faker.word.noun({ strategy: "any-length" })}-service`,
+      message: faker.hacker.phrase(),
+      request_id: uuidV4(ctx.rng)
+    },
+    ["faker.word.noun", "faker.hacker.phrase"]
+  );
 }
 
 function metric(ctx: RouteContext): Generated {
-  return {
-    name: `${ctx.rng.pick(WORDS)}.${ctx.rng.pick(["latency", "count", "error_rate", "memory"])}`,
-    value: round(ctx.rng.number(0, 1000), 3),
-    unit: ctx.rng.pick(["ms", "count", "percent", "bytes"]),
-    tags: { service: `${ctx.rng.pick(WORDS)}-api`, region: ctx.rng.pick(["iad", "sfo", "fra", "nrt"]) },
-    timestamp: new Date().toISOString()
-  };
+  const faker = fakerFor(ctx);
+  return fakerValue(
+    {
+      name: `${faker.company.buzzNoun()}.${ctx.rng.pick(["latency", "count", "error_rate", "memory"])}`,
+      value: round(ctx.rng.number(0, 1000), 3),
+      unit: ctx.rng.pick(["ms", "count", "percent", "bytes"]),
+      tags: { service: `${faker.word.noun({ strategy: "any-length" })}-api`, region: ctx.rng.pick(["iad", "sfo", "fra", "nrt"]) },
+      timestamp: new Date().toISOString()
+    },
+    ["faker.company.buzzNoun", "faker.word.noun"]
+  );
 }
 
 function trace(ctx: RouteContext): Generated {
@@ -2108,7 +2413,7 @@ function graphql(ctx: RouteContext): Generated {
   if (variant === "error") {
     return { errors: [{ message: "Generated GraphQL error", path: ["user", "email"] }], data: { user: null } };
   }
-  return { data: { user: user(ctx) } };
+  return { data: { user: makeUser(ctx) } };
 }
 
 function table(ctx: RouteContext): Generated {
@@ -2140,7 +2445,7 @@ function scenario(ctx: RouteContext): Generated {
   if (type === "auth") {
     const users = queryInt(ctx.url.searchParams, "users", 5, 1, 100);
     return {
-      users: Array.from({ length: users }, () => user(ctx)),
+      users: Array.from({ length: users }, () => makeUser(ctx)),
       sessions: Array.from({ length: users }, () => ({ id: secureNamedToken({ ...ctx, resource: "sessionid" }), user_id: uuidV4(ctx.rng), expires_at: randomFutureDate(ctx, 7).toISOString() })),
       audit_events: Array.from({ length: users * 2 }, () => log({ ...ctx, variants: ["info"] }))
     };
@@ -2165,8 +2470,8 @@ function scenario(ctx: RouteContext): Generated {
       alerts: Array.from({ length: ctx.rng.int(1, 5) }, () => alert(ctx))
     };
   }
-  const users = Array.from({ length: queryInt(ctx.url.searchParams, "users", 5, 1, 100) }, () => user(ctx));
-  const products = Array.from({ length: queryInt(ctx.url.searchParams, "products", 10, 1, 100) }, () => product(ctx));
+  const users = Array.from({ length: queryInt(ctx.url.searchParams, "users", 5, 1, 100) }, () => makeUser(ctx));
+  const products = Array.from({ length: queryInt(ctx.url.searchParams, "products", 10, 1, 100) }, () => makeProduct(ctx));
   const orders = Array.from({ length: queryInt(ctx.url.searchParams, "orders", 10, 1, 1000) }, () => order(ctx));
   return { users, products, orders, invoices: orders.slice(0, 20).map(() => invoice(ctx)) };
 }
@@ -2210,17 +2515,18 @@ function fillTemplate(ctx: RouteContext, template: unknown): unknown {
 function valueForType(ctx: RouteContext, typeSpec: string): unknown {
   const [type, variant] = typeSpec.toLowerCase().split(":");
   const local = { ...ctx, variants: variant ? [variant] : [] };
+  const faker = fakerFor(local);
   switch (type) {
     case "uuid":
       return uuid(local);
     case "name":
-      return name(local);
+      return randomFullName(local, variant);
     case "email":
-      return email(local);
+      return faker.internet.email();
     case "username":
-      return username(local);
+      return faker.internet.username();
     case "phone":
-      return phone(local);
+      return faker.phone.number();
     case "num":
     case "number":
     case "int":
